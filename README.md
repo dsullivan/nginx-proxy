@@ -316,6 +316,18 @@ $ docker run -d -p 80:80 -p 443:443 \
 
 You'll need apache2-utils on the machine where you plan to create the htpasswd file. Follow these [instructions](http://httpd.apache.org/docs/2.2/programs/htpasswd.html)
 
+### Vouch SSO and OAuth Support
+
+You can also configure support for SSO using the [Vouch Proxy](https://github.com/vouch/vouch-proxy).
+
+If you add a VOUCH_HOST variable to your container, the generated nginx server and location configurations will
+include the `auth_request` directive, `/validate` location configuration pointing to your vouch server, a
+redirect to the vouch login page on 401 validation response, and extra `X-Vouch-IdP` headers.
+
+Note that you must also deploy a Vouch Proxy server or container at the designated location.
+This configuration simply adds the necessary nginx configuration for your proxied services.
+
+
 ### Custom Nginx Configuration
 
 If you need to configure Nginx beyond what is possible using environment variables, you can provide custom configuration files on either a proxy-wide or per-`VIRTUAL_HOST` basis.

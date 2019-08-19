@@ -188,6 +188,9 @@ upstream {{ $upstream_name }} {
 
 {{ $is_https := (and (ne $https_method "nohttps") (ne $cert "") (exists (printf "/etc/nginx/certs/%s.crt" $cert)) (exists (printf "/etc/nginx/certs/%s.key" $cert))) }}
 
+{{/* Use vouch for authentication / SSO */}}
+{{ $vouch_host := (first (groupByKeys $containers "Env.VOUCH_HOST")) }}
+
 {{ if $is_https }}
 
 {{ if eq $https_method "redirect" }}
@@ -272,6 +275,34 @@ server {
 	include /etc/nginx/vhost.d/default;
 	{{ end }}
 
+	{{ if ne $vouch_host "" }}
+	auth_request /validate;
+	
+	location = /validate {
+		proxy_pass http://{{ trim $vouch_host }}/validate;
+		proxy_pass_request_body off;
+		proxy_set_header Host $http_host;
+		proxy_set_header Content-Length "";
+	
+		auth_request_set $auth_resp_x_vouch_user $upstream_http_x_vouch_user;
+		auth_request_set $auth_resp_x_vouch_idp_claims_groups $upstream_http_x_vouch_idp_claims_groups;
+		auth_request_set $auth_resp_x_vouch_idp_claims_given_name $upstream_http_x_vouch_idp_claims_given_name;
+		auth_request_set $auth_resp_x_vouch_idp_accesstoken $upstream_http_x_vouch_idp_accesstoken;
+		auth_request_set $auth_resp_x_vouch_idp_idtoken $upstream_http_x_vouch_idp_idtoken;
+	
+		auth_request_set $auth_resp_jwt $upstream_http_x_vouch_jwt;
+		auth_request_set $auth_resp_err $upstream_http_x_vouch_err;
+		auth_request_set $auth_resp_failcount $upstream_http_x_vouch_failcount;
+	}
+	
+	error_page 401 = @error401;
+	
+	location @error401 {
+		return 302 https://{{ trim $vouch_host }}/login?url=$scheme://$http_host$request_uri&vouch-failcount=$auth_resp_failcount&X-Vouch-Token=$auth_resp_jwt&error=$auth_resp_err;
+	}
+	{{ end }}
+
+
 	location / {
 		{{ if eq $proto "uwsgi" }}
 		include uwsgi_params;
@@ -284,6 +315,15 @@ server {
 		proxy_pass {{ trim $proto }}://{{ trim $upstream_name }};
 		{{ end }}
 
+		{{ if ne $vouch_host "" }}
+		proxy_set_header Host $http_host;
+		proxy_set_header X-Vouch-User $auth_resp_x_vouch_user;
+		proxy_set_header X-Vouch-IdP-Claims-Groups $auth_resp_x_vouch_idp_claims_groups;
+		proxy_set_header X-Vouch-IdP-Claims-Given_Name $auth_resp_x_vouch_idp_claims_given_name;
+		proxy_set_header X-Vouch-IdP-AccessToken $auth_resp_x_vouch_idp_accesstoken;
+		proxy_set_header X-Vouch-IdP-IdToken $auth_resp_x_vouch_idp_idtoken;
+
+		{{ end }}
 		{{ if (exists (printf "/etc/nginx/htpasswd/%s" $host)) }}
 		auth_basic	"Restricted {{ $host }}";
 		auth_basic_user_file	{{ (printf "/etc/nginx/htpasswd/%s" $host) }};
