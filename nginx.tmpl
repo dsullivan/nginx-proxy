@@ -189,7 +189,7 @@ upstream {{ $upstream_name }} {
 {{ $is_https := (and (ne $https_method "nohttps") (ne $cert "") (exists (printf "/etc/nginx/certs/%s.crt" $cert)) (exists (printf "/etc/nginx/certs/%s.key" $cert))) }}
 
 {{/* Use vouch for authentication / SSO */}}
-{{ $vouch_host := (first (groupByKeys $containers "Env.VOUCH_HOST")) }}
+{{ $vouch_host := or (first (groupByKeys $containers "Env.VOUCH_HOST")) "" }}
 
 {{ if $is_https }}
 
